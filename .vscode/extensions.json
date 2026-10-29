@@ -1,0 +1,16 @@
+{
+  // VS Code shows these under Extensions → "Recommended" and offers to install them when the folder is opened
+  "recommendations": [
+    "ms-dotnettools.csdevkit",
+    "ms-azuretools.vscode-containers",
+    "ms-vscode-remote.remote-wsl",
+    "angular.ng-template",
+    "zxh404.vscode-proto3",
+    "redhat.vscode-yaml",
+    "humao.rest-client",
+    "cweijan.vscode-mysql-client2",
+    "eamodio.gitlens",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode"
+  ]
+}

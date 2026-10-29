@@ -45,19 +45,49 @@ docker service inspect lab_orders-api --format '{{index .Spec.Labels "lab.descri
 | http://localhost:8025 | Mailpit: every email the system sends |
 | `localhost:1433` / `:6379` / `:27017` | SQL Server (`sa`), Redis, MongoDB (`labadmin`), for the **Database Client** VS Code extension |
 
-## Start from scratch
+## First-time setup on a new machine (Windows 10/11)
 
-Requirements (already installed on this machine): Docker Desktop with WSL integration for Ubuntu, .NET 10 SDK, Node 24, Angular CLI.
+You need at least **8 GB RAM** (16 GB is more comfortable) and about 20 GB of free disk. Do the steps in order. Each one ends with a check.
 
-Open an **Ubuntu (WSL)** terminal: in VS Code, open a terminal and pick "Ubuntu (WSL)", or run `wsl`. Then:
+| # | Install | How | Check (new terminal) |
+|---|---|---|---|
+| 1 | **WSL 2 + Ubuntu** | Admin PowerShell: `wsl --install -d Ubuntu`, reboot if asked, then choose a Linux username and password | `wsl -l -v` lists Ubuntu, VERSION 2 |
+| 2 | **Docker Desktop** | https://www.docker.com/products/docker-desktop. Keep "Use WSL 2 based engine" ticked | `docker version` shows a Client and a Server |
+| 3 | **Docker for Ubuntu** | Docker Desktop → Settings → Resources → **WSL Integration** → switch **Ubuntu** on → Apply & Restart | `wsl -d Ubuntu -- docker version` works |
+| 4 | **Git** | https://git-scm.com/download/win | `git --version` |
+| 5 | **.NET 10 SDK** | `winget install Microsoft.DotNet.SDK.10` | `dotnet --list-sdks` shows 10.0.x |
+| 6 | **Node.js 24 LTS** | https://nodejs.org (or `winget install OpenJS.NodeJS.LTS`) | `node -v` shows v24.x |
+| 7 | **Angular CLI** | `npm install -g @angular/cli` | `ng version` |
+| 8 | **VS Code** | https://code.visualstudio.com. Open the repo folder, then click **Install** when VS Code offers the recommended extensions (listed in `.vscode/extensions.json`: C# Dev Kit, Docker, WSL, Angular, proto3, YAML, REST Client, Database Client, GitLens, ESLint, Prettier) | Extensions view → "Recommended" all installed |
 
-```bash
-cd /mnt/d/LAB1
-bash scripts/bootstrap.sh     # Swarm, network, passwords + secrets, image registry, Portainer
-bash scripts/build.sh all     # build all 7 images, push to localhost:5000 (first time: slow)
-bash scripts/deploy.sh        # deploy the whole application from infra/stack.yml
-bash scripts/status.sh        # every service + a health check through Traefik
+Optional, if Docker runs out of memory: create `%UserProfile%\.wslconfig` with these two lines, then run `wsl --shutdown` and restart Docker Desktop.
+
+```ini
+[wsl2]
+memory=5GB
 ```
+
+## Start the lab
+
+1. **Get the code:**
+   ```powershell
+   git clone https://github.com/Abdulrehman-Malik/LAB1.git D:\LAB1
+   ```
+   Any folder works. Below, `D:\LAB1` becomes `/mnt/d/LAB1` inside Ubuntu, and `C:\code\LAB1` would become `/mnt/c/code/LAB1`.
+2. **Open an Ubuntu (WSL) terminal**: in VS Code, open a terminal and pick "Ubuntu (WSL)" from the **+** dropdown, or run `wsl`. Then:
+   ```bash
+   cd /mnt/d/LAB1
+   bash scripts/bootstrap.sh     # Swarm, network, NEW random passwords (infra/.env) + secrets, image registry, Portainer
+   bash scripts/build.sh all     # build all 7 images, push to localhost:5000 (first time: 15-30 min, downloads a lot)
+   bash scripts/deploy.sh        # deploy everything; ends with OK/FAIL per service
+   bash scripts/status.sh        # every service + a health check through Traefik (all should say 200)
+   ```
+3. Open **http://localhost:8000**, place an order, and follow [docs/exercises.md](docs/exercises.md) from **M0**.
+
+`infra/.env` is created by `bootstrap.sh` on your machine and is never committed. The passwords for Portainer, SQL Server, MinIO and MongoDB are in it.
+
+**If something fails:** `bash scripts/status.sh`, then `bash scripts/logs.sh errors`, then `docker service ps lab_<service> --no-trunc` (the error column).
+A failed `build.sh` is usually a network hiccup while downloading packages: run the same command again.
 
 ## Daily commands (Ubuntu terminal, in /mnt/d/LAB1)
 
