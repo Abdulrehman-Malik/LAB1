@@ -49,16 +49,32 @@ docker service inspect lab_orders-api --format '{{index .Spec.Labels "lab.descri
 
 You need at least **8 GB RAM** (16 GB is more comfortable) and about 20 GB of free disk. Do the steps in order. Each one ends with a check.
 
-| # | Install | How | Check (new terminal) |
-|---|---|---|---|
-| 1 | **WSL 2 + Ubuntu** | Admin PowerShell: `wsl --install -d Ubuntu`, reboot if asked, then choose a Linux username and password | `wsl -l -v` lists Ubuntu, VERSION 2 |
-| 2 | **Docker Desktop** | https://www.docker.com/products/docker-desktop. Keep "Use WSL 2 based engine" ticked | `docker version` shows a Client and a Server |
-| 3 | **Docker for Ubuntu** | Docker Desktop → Settings → Resources → **WSL Integration** → switch **Ubuntu** on → Apply & Restart | `wsl -d Ubuntu -- docker version` works |
-| 4 | **Git** | https://git-scm.com/download/win | `git --version` |
-| 5 | **.NET 10 SDK** | `winget install Microsoft.DotNet.SDK.10` | `dotnet --list-sdks` shows 10.0.x |
-| 6 | **Node.js 24 LTS** | https://nodejs.org (or `winget install OpenJS.NodeJS.LTS`) | `node -v` shows v24.x |
-| 7 | **Angular CLI** | `npm install -g @angular/cli` | `ng version` |
-| 8 | **VS Code** | https://code.visualstudio.com. Open the repo folder, then click **Install** when VS Code offers the recommended extensions (listed in `.vscode/extensions.json`: C# Dev Kit, Docker, WSL, Angular, proto3, YAML, REST Client, Database Client, GitLens, ESLint, Prettier) | Extensions view → "Recommended" all installed |
+| # | Install | Why the lab needs it | How | Check (new terminal) |
+|---|---|---|---|---|
+| 1 | **WSL 2 + Ubuntu** | A real Linux inside Windows. Docker runs its containers in WSL 2, and every lab script in `scripts/` is a bash script you run from the Ubuntu terminal | Admin PowerShell: `wsl --install -d Ubuntu`, reboot if asked, then choose a Linux username and password | `wsl -l -v` lists Ubuntu, VERSION 2 |
+| 2 | **Docker Desktop** | Builds the images and runs every container. Its engine also provides **Docker Swarm**, the orchestrator that runs the `lab` and `ops` stacks, restarts crashed containers and does rolling updates | https://www.docker.com/products/docker-desktop. Keep "Use WSL 2 based engine" ticked | `docker version` shows a Client and a Server |
+| 3 | **Docker for Ubuntu** | Lets the `docker` command inside Ubuntu talk to Docker Desktop's engine, so `bash scripts/*.sh` can build, deploy and read logs | Docker Desktop → Settings → Resources → **WSL Integration** → switch **Ubuntu** on → Apply & Restart | `wsl -d Ubuntu -- docker version` works |
+| 4 | **Git** | Gets the code and tracks your changes. In this lab Git is also the **source of truth for what runs**: `infra/stack.yml` and `infra/versions.env` describe the deployed system | https://git-scm.com/download/win | `git --version` |
+| 5 | **.NET 10 SDK** | Builds, runs and tests the C# services on Windows (`dotnet build`, `dotnet run`, `dotnet test`), and creates EF Core migrations (`dotnet ef`). The Docker images bring their own SDK, so this is for local development | `winget install Microsoft.DotNet.SDK.10` | `dotnet --list-sdks` shows 10.0.x |
+| 6 | **Node.js 24 LTS** | Runs the Angular tooling and `npm`, which installs the portal's packages (`src/web-portal/package.json`) | https://nodejs.org (or `winget install OpenJS.NodeJS.LTS`) | `node -v` shows v24.x |
+| 7 | **Angular CLI** | The `ng` command: `ng serve` runs the portal at http://localhost:4200 with live reload while you edit it, and `ng build` compiles it | `npm install -g @angular/cli` | `ng version` |
+| 8 | **VS Code** | The editor. With the extensions below it understands every file type in the lab and can talk to the containers and databases | https://code.visualstudio.com. Open the repo folder, then click **Install** when VS Code offers the recommended extensions | Extensions view → "Recommended" all installed |
+
+**The recommended VS Code extensions** (listed in `.vscode/extensions.json`) and what each one is for:
+
+| Extension | What it does for you here |
+|---|---|
+| **C# Dev Kit** (`ms-dotnettools.csdevkit`) | C# IntelliSense, Solution Explorer for `LAB1.slnx`, run and debug a service with F5, run the unit tests in `tests/Lab.Tests` |
+| **Container Tools** (`ms-azuretools.vscode-containers`) | Sidebar view of images, containers, Swarm services and their logs; syntax help in `Dockerfile` and `stack.yml` |
+| **WSL** (`ms-vscode-remote.remote-wsl`) | Opens Ubuntu terminals inside VS Code, where the `bash scripts/...` commands run |
+| **Angular Language Service** (`angular.ng-template`) | Autocomplete and error checking inside the portal's HTML templates (`src/web-portal/src/app/*.ts`) |
+| **vscode-proto3** (`zxh404.vscode-proto3`) | Syntax highlighting and checks for the gRPC contracts in `src/shared-protos/*.proto` |
+| **YAML** (`redhat.vscode-yaml`) | Validation and autocomplete for `infra/stack.yml`, `infra/ops.yml` and `infra/autoscale.yml`; catches indentation mistakes before you deploy |
+| **REST Client** (`humao.rest-client`) | Click **Send Request** in the `*.http` file next to each service to call its API without Postman |
+| **Database Client** (`cweijan.vscode-mysql-client2`) | Browse and query SQL Server (`localhost,1433`), Redis (`:6379`) and MongoDB (`:27017`) from the sidebar: see the tables, cache keys and audit documents the services write |
+| **GitLens** (`eamodio.gitlens`) | Shows who changed each line and why (blame, history), useful for following how the lab evolved |
+| **ESLint** (`dbaeumer.vscode-eslint`) | Flags mistakes in the portal's TypeScript |
+| **Prettier** (`esbenp.prettier-vscode`) | Formats TypeScript, HTML, CSS and JSON consistently on save |
 
 Optional, if Docker runs out of memory: create `%UserProfile%\.wslconfig` with these two lines, then run `wsl --shutdown` and restart Docker Desktop.
 
