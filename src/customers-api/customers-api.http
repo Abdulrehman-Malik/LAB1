@@ -1,0 +1,28 @@
+# Open in VS Code and click "Send Request" (REST Client extension).
+# Local run (dotnet run): http://localhost:5101   Through Traefik (later): http://localhost:8000
+@baseUrl = http://localhost:5101
+
+### Health (includes a database check)
+GET {{baseUrl}}/api/customers/health
+
+### List customers
+GET {{baseUrl}}/api/customers
+
+### Only customers in one city
+GET {{baseUrl}}/api/customers?city=Lahore
+
+### One customer
+GET {{baseUrl}}/api/customers/1
+
+### Not found
+GET {{baseUrl}}/api/customers/999
+
+### Create a customer
+POST {{baseUrl}}/api/customers
+Content-Type: application/json
+
+{
+  "name": "Ayesha Malik",
+  "email": "ayesha@lab.local",
+  "city": "Multan"
+}

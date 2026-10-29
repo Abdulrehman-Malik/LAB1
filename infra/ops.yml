@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+# Operations tools, kept separate from the application stack. Deployed by scripts/bootstrap.sh:
+#   docker stack deploy -c infra/ops.yml ops
+#
+#   ops_image-registry   localhost:5000  where scripts/build.sh pushes images (stands in for Azure Container Registry)
+#   ops_portainer-ui     https://localhost:9443  web UI over Swarm (user admin, password PORTAINER_ADMIN_PASSWORD in infra/.env)
+#   ops_portainer-agent  one per node; lets Portainer see containers, volumes and logs on that node
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+services:
+  image-registry:
+    image: registry:2
+    hostname: image-registry
+    ports:
+      - "5000:5000"   # list images: curl http://localhost:5000/v2/_catalog
+    volumes:
+      - registry-data:/var/lib/registry
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 128M
+      labels:
+        lab.description: "Private image registry. scripts/build.sh pushes here, Swarm pulls from here"
+
+  portainer-agent:
+    image: portainer/agent:lts
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+    networks:
+      - portainer-agent-network
+    deploy:
+      mode: global   # one agent on every node
+      placement:
+        constraints: [node.platform.os == linux]
+      labels:
+        lab.description: "Portainer agent: gives the UI access to this node's containers, volumes and logs"
+
+  portainer-ui:
+    image: portainer/portainer-ce:lts
+    hostname: portainer-ui
+    # Admin password comes from a Swarm secret, so there is no 5-minute "create admin user" window
+    command: -H tcp://tasks.portainer-agent:9001 --tlsskipverify --admin-password-file /run/secrets/portainer_admin_password
+    ports:
+      - "9443:9443"
+    volumes:
+      - portainer-data:/data
+    networks:
+      - portainer-agent-network
+    secrets:
+      - portainer_admin_password
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      resources:
+        limits:
+          memory: 256M
+      labels:
+        lab.description: "Portainer web UI: stacks, services, logs, scaling by clicking (changes here are NOT in Git!)"
+
+networks:
+  portainer-agent-network:
+    driver: overlay
+    attachable: true
+
+volumes:
+  registry-data:
+    name: registry_registry-data   # reuse the volume that already holds the pushed images
+  portainer-data:
+
+secrets:
+  portainer_admin_password:
+    external: true

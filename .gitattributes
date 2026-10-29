@@ -1,0 +1,4 @@
+# Shell scripts and stack files run inside Linux: keep LF line endings
+*.sh  text eol=lf
+*.yml text eol=lf
+.env* text eol=lf

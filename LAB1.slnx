@@ -1,0 +1,27 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/autoscaler/">
+    <Project Path="src/autoscaler/Autoscaler.csproj" />
+  </Folder>
+  <Folder Name="/src/billing-api/">
+    <Project Path="src/billing-api/BillingApi.csproj" />
+  </Folder>
+  <Folder Name="/src/customers-api/">
+    <Project Path="src/customers-api/CustomersApi.csproj" />
+  </Folder>
+  <Folder Name="/src/documents-api/">
+    <Project Path="src/documents-api/DocumentsApi.csproj" />
+  </Folder>
+  <Folder Name="/src/notification-worker/">
+    <Project Path="src/notification-worker/NotificationWorker.csproj" />
+  </Folder>
+  <Folder Name="/src/orders-api/">
+    <Project Path="src/orders-api/OrdersApi.csproj" />
+  </Folder>
+  <Folder Name="/src/shared/">
+    <Project Path="src/shared/Lab.Shared/Lab.Shared.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Lab.Tests/Lab.Tests.csproj" />
+  </Folder>
+</Solution>

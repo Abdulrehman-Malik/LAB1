@@ -1,0 +1,11 @@
+# Generated secrets
+infra/.env
+
+# .NET
+bin/
+obj/
+
+# Node / Angular
+node_modules/
+dist/
+.angular/

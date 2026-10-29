@@ -1,0 +1,9 @@
+# Open in VS Code and click "Send Request" (REST Client extension).
+# Local run (dotnet run): http://localhost:5501   Through Traefik: http://localhost:8000
+@baseUrl = http://localhost:8000
+
+### Health (checks MongoDB)
+GET {{baseUrl}}/api/notifications/health
+
+### Last 50 audit events from MongoDB (one per email sent or failed)
+GET {{baseUrl}}/api/notifications/audit

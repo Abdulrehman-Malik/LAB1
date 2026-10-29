@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>OrdersApi</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Client side of the shared contracts: generates CustomerServiceClient and BillingServiceClient -->
+    <Protobuf Include="..\shared-protos\customers.proto" GrpcServices="Client" Link="Protos\customers.proto" />
+    <Protobuf Include="..\shared-protos\billing.proto" GrpcServices="Client" Link="Protos\billing.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\shared\Lab.Shared\Lab.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.36.2" />
+    <PackageReference Include="Grpc.Net.ClientFactory" Version="2.85.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.85.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.14" />
+  </ItemGroup>
+</Project>

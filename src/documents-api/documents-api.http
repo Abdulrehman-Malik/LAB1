@@ -1,0 +1,33 @@
+# Open in VS Code and click "Send Request" (REST Client extension).
+# Local run (dotnet run): http://localhost:5401   Through Traefik: http://localhost:8000
+@baseUrl = http://localhost:8000
+
+### Health (checks SQL Server AND MinIO)
+GET {{baseUrl}}/api/documents/health
+
+### List all documents
+GET {{baseUrl}}/api/documents
+
+### Documents of order 1
+GET {{baseUrl}}/api/documents?orderId=1
+
+### Upload a small text file for order 1 (multipart form)
+POST {{baseUrl}}/api/documents
+Content-Type: multipart/form-data; boundary=LabBoundary
+
+--LabBoundary
+Content-Disposition: form-data; name="orderId"
+
+1
+--LabBoundary
+Content-Disposition: form-data; name="file"; filename="note.txt"
+Content-Type: text/plain
+
+Delivery note for order 1
+--LabBoundary--
+
+### Download document 1
+GET {{baseUrl}}/api/documents/1/download
+
+### Delete document 1 (removes the MinIO object and the SQL row)
+DELETE {{baseUrl}}/api/documents/1

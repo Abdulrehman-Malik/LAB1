@@ -1,0 +1,30 @@
+// gRPC contract owned by billing-api. orders-api compiles the client from this same file.
+// Money travels as whole cents (int64) to avoid floating-point rounding.
+syntax = "proto3";
+
+option csharp_namespace = "Lab.Contracts.Billing";
+
+package billing.v1;
+
+service BillingService {
+  rpc CreateInvoice (CreateInvoiceRequest) returns (InvoiceReply);
+  rpc GetInvoiceByOrder (GetInvoiceByOrderRequest) returns (InvoiceReply);
+}
+
+message CreateInvoiceRequest {
+  int32 order_id = 1;
+  int32 customer_id = 2;
+  int64 amount_cents = 3;
+}
+
+message GetInvoiceByOrderRequest {
+  int32 order_id = 1;
+}
+
+message InvoiceReply {
+  int32 id = 1;
+  int32 order_id = 2;
+  int64 amount_cents = 3;
+  string status = 4;   // Pending | Paid
+  bool email_sent = 5; // added later: set by notification-worker. Old clients simply ignore field 5
+}

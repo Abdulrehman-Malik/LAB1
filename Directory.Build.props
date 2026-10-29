@@ -1,0 +1,8 @@
+<Project>
+  <!-- Settings shared by every .NET project in the lab -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+</Project>

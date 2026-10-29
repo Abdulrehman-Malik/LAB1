@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- Background job + a small REST API (audit log, health). Web SDK so it can expose /api/notifications/*. -->
+  <PropertyGroup>
+    <RootNamespace>NotificationWorker</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Client side of customers.proto: the worker looks up the customer's email over gRPC -->
+    <Protobuf Include="..\shared-protos\customers.proto" GrpcServices="Client" Link="Protos\customers.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\shared\Lab.Shared\Lab.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.36.2" />
+    <PackageReference Include="Grpc.Net.ClientFactory" Version="2.85.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.85.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="MailKit" Version="4.18.2" />
+    <PackageReference Include="MongoDB.Driver" Version="3.13.0" />
+  </ItemGroup>
+</Project>

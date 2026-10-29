@@ -1,0 +1,35 @@
+# Open in VS Code and click "Send Request" (REST Client extension).
+# Local run (dotnet run): http://localhost:5301   Through Traefik (later): http://localhost:8000
+# Needs customers-api and billing-api running too (gRPC), plus SQL Server and Redis.
+@baseUrl = http://localhost:5301
+
+### Health
+GET {{baseUrl}}/api/orders/health
+
+### Place an order: checks the customer over gRPC, saves it, asks billing-api (gRPC) for an invoice
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+
+{
+  "customerId": 1,
+  "product": "Laptop stand",
+  "quantity": 2,
+  "unitPrice": 2250
+}
+
+### Order details: send twice and compare the X-Cache response header (MISS, then HIT)
+GET {{baseUrl}}/api/orders/1
+
+### Unknown customer: 400
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+
+{
+  "customerId": 999,
+  "product": "Ghost item",
+  "quantity": 1,
+  "unitPrice": 10
+}
+
+### All orders
+GET {{baseUrl}}/api/orders

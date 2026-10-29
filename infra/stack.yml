@@ -1,0 +1,354 @@
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+# The whole application as ONE Swarm stack named "lab". Deploy with: bash scripts/deploy.sh
+#   - image tags come from infra/versions.env
+#   - passwords are Swarm secrets created by scripts/bootstrap.sh
+#   - service names follow <role>-<tool> (db-sqlserver, cache-redis, ...) or <name>-api / <name>-worker
+#   - every replica gets a readable hostname (orders-api-2), which shows up in logs and in the X-Served-By header
+#
+#   Browser ─► :8000 gateway-traefik ─┬─ /                   web-portal          (Angular in Nginx)
+#                                     ├─ /api/customers      customers-api ─────┐
+#                                     ├─ /api/billing        billing-api ───────┤ db-sqlserver
+#                                     ├─ /api/orders         orders-api ────────┤ (+ cache-redis, + gRPC to customers/billing)
+#                                     ├─ /api/documents      documents-api ─────┘ (+ storage-minio for the files)
+#                                     └─ /api/notifications  notification-worker ── db-mongodb (audit) + mail-mailpit (SMTP)
+#   autoscaler ── Docker API ── scales the *-api services using infra/autoscale.yml
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+
+# ---- Shared settings for the .NET services (YAML anchors, merged in with "<<:") ----
+x-dotnet-service: &dotnet-service
+  stop_grace_period: 20s     # time to drain (8 s, see Lab.Shared UseLabGracefulShutdown) and shut down cleanly
+  networks:
+    - labnet
+
+# The sa password appears in the container as the file /run/secrets/Database__Password,
+# which .NET reads as the setting Database:Password (Lab.Shared/LabHostExtensions.cs, AddKeyPerFile)
+x-sql-secret: &sql-secret
+  source: mssql_sa_password
+  target: Database__Password
+
+# Health check timing: a new replica only becomes "running" (and gets traffic from Traefik) once its check passes.
+# The runtime image has no curl, so the checks use bash's built-in /dev/tcp to send a plain HTTP request.
+x-health-timing: &health-timing
+  interval: 10s
+  timeout: 3s
+  retries: 3
+  # Failures while starting up (migrations, JIT) don't count. 120 s because a full redeploy restarts every .NET
+  # service at once on a 4-CPU laptop: one cold start took 80 s, failed a 60 s budget, and Swarm rolled it back.
+  start_period: 120s
+
+x-dotnet-deploy: &dotnet-deploy
+  replicas: 1                 # baseline; the autoscaler changes this at runtime (infra/autoscale.yml)
+  update_config:
+    parallelism: 1            # rolling update: one replica at a time
+    order: start-first        # start the new replica before stopping the old one
+    failure_action: rollback  # new version never becomes healthy -> go back automatically
+  rollback_config:
+    parallelism: 1
+    order: start-first
+  resources:
+    limits:
+      cpus: "0.50"            # the autoscaler measures CPU as a % of this limit
+      memory: 256M
+
+services:
+  # ═══════════════════════ Front door ═══════════════════════
+  gateway-traefik:
+    image: traefik:v3.6
+    hostname: gateway-traefik
+    command:
+      - --providers.swarm=true
+      - --providers.swarm.exposedByDefault=false   # only services with traefik.enable=true get a route
+      - --providers.swarm.network=labnet
+      - --providers.swarm.refreshSeconds=5         # notice new/removed replicas within 5 s (default 15)
+      - --entrypoints.web.address=:80
+      - --api.insecure=true                        # dashboard on :8088 (lab only)
+      - --accesslog=true                           # one line per request: docker service logs lab_gateway-traefik
+    ports:
+      - "8000:80"     # the application's single entry point
+      - "8088:8080"   # Traefik dashboard: every router and service
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # reads service labels to build routes
+    networks:
+      - labnet
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+      resources:
+        limits:
+          memory: 128M
+      labels:
+        lab.description: "Reverse proxy. Routes http://localhost:8000/<path> to a service using the traefik.* labels below"
+
+  # ═══════════════════════ Frontend ═══════════════════════
+  web-portal:
+    image: localhost:5000/web-portal:${WEB_PORTAL_TAG}
+    hostname: "web-portal-{{.Task.Slot}}"
+    networks:
+      - labnet
+    deploy:
+      replicas: 1
+      update_config:
+        order: start-first
+      resources:
+        limits:
+          memory: 32M
+      labels:
+        lab.description: "Angular UI served by Nginx. Calls the APIs with relative /api/... URLs"
+        traefik.enable: "true"
+        traefik.http.routers.portal.rule: PathPrefix(`/`)   # shortest rule = lowest priority, so /api/* wins
+        traefik.http.services.portal.loadbalancer.server.port: "80"
+
+  # ═══════════════════════ Backend APIs ═══════════════════════
+  customers-api:
+    <<: *dotnet-service
+    image: localhost:5000/customers-api:${CUSTOMERS_API_TAG}
+    hostname: "customers-api-{{.Task.Slot}}"
+    environment:
+      Logging__LogLevel__Default: Information   # set to Debug to see gRPC calls arriving (exercises.md M11)
+    secrets: [*sql-secret]
+    healthcheck:
+      <<: *health-timing
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /api/customers/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q Healthy <&3"]
+    deploy:
+      <<: *dotnet-deploy
+      labels:
+        lab.description: "Customers. REST :8080 (via Traefik) + gRPC server :8081 (internal). DB: CustomersDb"
+        traefik.enable: "true"
+        traefik.http.routers.customers.rule: PathPrefix(`/api/customers`)
+        traefik.http.services.customers.loadbalancer.server.port: "8080"
+
+  billing-api:
+    <<: *dotnet-service
+    image: localhost:5000/billing-api:${BILLING_API_TAG}
+    hostname: "billing-api-{{.Task.Slot}}"
+    environment:
+      Logging__LogLevel__Default: Information
+    secrets: [*sql-secret]
+    healthcheck:
+      <<: *health-timing
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /api/billing/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q Healthy <&3"]
+    deploy:
+      <<: *dotnet-deploy
+      labels:
+        lab.description: "Invoices + fake payment gateway. REST :8080 + gRPC server :8081. DB: SalesDb, schema billing"
+        traefik.enable: "true"
+        traefik.http.routers.billing.rule: PathPrefix(`/api/billing`)
+        traefik.http.services.billing.loadbalancer.server.port: "8080"
+
+  orders-api:
+    <<: *dotnet-service
+    image: localhost:5000/orders-api:${ORDERS_API_TAG}
+    hostname: "orders-api-{{.Task.Slot}}"
+    environment:
+      Logging__LogLevel__Default: Information   # set to Debug to see Redis cache HIT/MISS lines
+    secrets: [*sql-secret]
+    healthcheck:
+      <<: *health-timing
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /api/orders/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q Healthy <&3"]
+    deploy:
+      <<: *dotnet-deploy
+      labels:
+        lab.description: "Orders. REST :8080; gRPC client of customers-api and billing-api; cache in Redis. DB: SalesDb, schema orders"
+        traefik.enable: "true"
+        traefik.http.routers.orders.rule: PathPrefix(`/api/orders`)
+        traefik.http.services.orders.loadbalancer.server.port: "8080"
+
+  documents-api:
+    <<: *dotnet-service
+    image: localhost:5000/documents-api:${DOCUMENTS_API_TAG}
+    hostname: "documents-api-{{.Task.Slot}}"
+    environment:
+      Logging__LogLevel__Default: Information
+    secrets:
+      - *sql-secret
+      - source: minio_root_password   # MinIO key, read as the setting Storage:SecretKey
+        target: Storage__SecretKey
+    healthcheck:
+      <<: *health-timing
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /api/documents/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q Healthy <&3"]
+    deploy:
+      <<: *dotnet-deploy
+      labels:
+        lab.description: "File upload/download. Bytes in MinIO (bucket documents), pointer rows in DocumentsDb"
+        traefik.enable: "true"
+        traefik.http.routers.documents.rule: PathPrefix(`/api/documents`)
+        traefik.http.services.documents.loadbalancer.server.port: "8080"
+
+  # ═══════════════════════ Background worker ═══════════════════════
+  notification-worker:
+    <<: *dotnet-service
+    image: localhost:5000/notification-worker:${NOTIFICATION_WORKER_TAG}
+    hostname: "notification-worker-{{.Task.Slot}}"
+    environment:
+      Logging__LogLevel__Default: Information   # set to Debug to see "No new invoices" every run
+      Worker__IntervalSeconds: "30"
+    secrets:
+      - *sql-secret
+      - source: mongo_root_password   # read as the setting Mongo:Password
+        target: Mongo__Password
+    healthcheck:
+      <<: *health-timing
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /api/notifications/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q Healthy <&3"]
+    deploy:
+      <<: *dotnet-deploy
+      replicas: 1   # a background job: not in autoscale.yml
+      labels:
+        lab.description: "Every 30 s emails new invoices (SQL claim -> gRPC customer lookup -> SMTP -> MongoDB audit)"
+        traefik.enable: "true"
+        traefik.http.routers.notifications.rule: PathPrefix(`/api/notifications`)
+        traefik.http.services.notifications.loadbalancer.server.port: "8080"
+
+  # ═══════════════════════ Autoscaler ═══════════════════════
+  autoscaler:
+    image: localhost:5000/autoscaler:${AUTOSCALER_TAG}
+    hostname: autoscaler
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock   # reads CPU stats and scales services through the Docker API
+    configs:
+      - source: autoscale
+        target: /config/autoscale.yml
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]   # scaling needs a manager node
+      resources:
+        limits:
+          memory: 128M
+      labels:
+        lab.description: "Scales the *-api services between min and max replicas by CPU. Rules: infra/autoscale.yml"
+
+  # ═══════════════════════ Data ═══════════════════════
+  db-sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    hostname: db-sqlserver
+    # The image has no *_FILE support, so read the sa password from the Swarm secret before starting
+    command: ["/bin/bash", "-c", "export MSSQL_SA_PASSWORD=\"$$(cat /run/secrets/mssql_sa_password)\"; exec /opt/mssql/bin/sqlservr"]
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Express           # free "light" edition: buffer pool capped at ~1.4 GB
+      MSSQL_AGENT_ENABLED: "false" # Express has no SQL Agent
+    secrets:
+      - mssql_sa_password
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    ports:
+      - "1433:1433"   # for local dev and the Database Client extension (user sa)
+    networks:
+      - labnet
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          # SQL Server refuses to start with less than ~2 GB; scripts/sql-tune.sh then caps it at ~1 GB real use
+          memory: 2G
+      labels:
+        lab.description: "SQL Server 2022 Express. Databases: CustomersDb, SalesDb (orders + billing schemas), DocumentsDb"
+
+  cache-redis:
+    image: redis:7-alpine
+    hostname: cache-redis
+    # Pure cache: 64 MB, evict least-recently-used keys when full, never write to disk
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    ports:
+      - "6379:6379"   # for local dev and the Database Client extension
+    networks:
+      - labnet
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 96M
+      labels:
+        lab.description: "Redis cache for orders-api (keys orders-api:order:<id>, 60 s). Not the source of truth"
+
+  db-mongodb:
+    image: mongo:8.0
+    hostname: db-mongodb
+    command: ["--wiredTigerCacheSizeGB", "0.25"]   # keep MongoDB small on an 8 GB laptop
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: labadmin
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongo_root_password
+    secrets:
+      - mongo_root_password
+    volumes:
+      - mongodb-data:/data/db
+    ports:
+      - "27017:27017"   # for local dev and the Database Client extension (user labadmin, authSource admin)
+    networks:
+      - labnet
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 512M
+      labels:
+        lab.description: "MongoDB. Database lab, collection audit: one JSON document per email sent/failed"
+
+  storage-minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z   # community build of MinIO (minio/minio images are no longer published)
+    hostname: storage-minio
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER_FILE: minio_root_user           # names of Swarm secrets in /run/secrets
+      MINIO_ROOT_PASSWORD_FILE: minio_root_password
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"   # S3 API (documents-api, local dev)
+      - "9001:9001"   # MinIO web console: browse buckets and files (user labadmin)
+    networks:
+      - labnet
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 384M
+      labels:
+        lab.description: "MinIO object storage (S3 API). Bucket documents holds uploaded files"
+
+  mail-mailpit:
+    image: axllent/mailpit:v1.32
+    hostname: mail-mailpit
+    environment:
+      MP_MAX_MESSAGES: "500"
+    ports:
+      - "8025:8025"   # web inbox: every email the system "sends" lands here
+      - "1025:1025"   # SMTP, for local dev
+    networks:
+      - labnet
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 64M
+      labels:
+        lab.description: "Fake SMTP server. Catches all emails; nothing really leaves the machine"
+
+networks:
+  labnet:
+    external: true
+
+volumes:
+  sqlserver-data:
+  mongodb-data:
+  minio-data:
+
+secrets:
+  mssql_sa_password:
+    external: true
+  mongo_root_password:
+    external: true
+  minio_root_user:
+    external: true
+  minio_root_password:
+    external: true
+
+configs:
+  autoscale:
+    # Swarm configs can't be edited, so the name includes a hash of the file (set by scripts/deploy.sh):
+    # change autoscale.yml -> new hash -> new config -> autoscaler restarts with the new rules
+    name: autoscale_${AUTOSCALE_HASH}
+    file: ./autoscale.yml

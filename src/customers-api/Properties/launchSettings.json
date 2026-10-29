@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "customers-api": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

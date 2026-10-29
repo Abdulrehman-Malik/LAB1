@@ -1,0 +1,22 @@
+// gRPC contract owned by customers-api. Callers (e.g. orders-api) compile the client from this same file,
+// so any change here must stay backward-compatible: add new fields with new numbers, never reuse or renumber.
+syntax = "proto3";
+
+option csharp_namespace = "Lab.Contracts.Customers";
+
+package customers.v1;
+
+service CustomerService {
+  rpc GetCustomer (GetCustomerRequest) returns (CustomerReply);
+}
+
+message GetCustomerRequest {
+  int32 id = 1;
+}
+
+message CustomerReply {
+  int32 id = 1;
+  string name = 2;
+  string email = 3;
+  string city = 4;
+}

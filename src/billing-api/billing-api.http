@@ -1,0 +1,20 @@
+# Open in VS Code and click "Send Request" (REST Client extension).
+# Local run (dotnet run): http://localhost:5201   Through Traefik (later): http://localhost:8000
+@baseUrl = http://localhost:5201
+
+### Health
+GET {{baseUrl}}/api/billing/health
+
+### All invoices (created by orders-api over gRPC when an order is placed)
+GET {{baseUrl}}/api/billing/invoices
+
+### One invoice
+GET {{baseUrl}}/api/billing/invoices/1
+
+### Pay an invoice (fake gateway: always approves)
+POST {{baseUrl}}/api/billing/invoices/1/pay
+Content-Type: application/json
+
+{
+  "cardNumber": "4111 1111 1111 1111"
+}

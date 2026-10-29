@@ -1,0 +1,51 @@
+# Autoscaling rules, read by the autoscaler service (src/autoscaler).
+#
+# Every checkIntervalSeconds, for each service below it measures the average CPU of its running replicas,
+# as a % of that service's CPU limit (deploy.resources.limits.cpus in stack.yml), then:
+#   CPU > scaleUpAbovePercent   for sustainedChecks checks in a row, and replicas < max  -> add 1 replica
+#   CPU < scaleDownBelowPercent for sustainedChecks checks in a row, and replicas > min  -> remove 1 replica
+# After a change it waits cooldownSeconds before changing that service again.
+# sustainedChecks ignores short spikes (.NET JIT and GC cause brief bursts even with no traffic).
+# Replicas younger than startupGraceSeconds are not measured (start-up CPU is not real load).
+# min is never below 1: with no load, one instance always stays running.
+#
+# To apply a change: edit this file, run "dotnet test" (it checks this file), then  bash scripts/deploy.sh
+stack: lab
+checkIntervalSeconds: 15
+startupGraceSeconds: 60
+
+services:
+  orders-api:
+    min: 1
+    max: 3
+    scaleUpAbovePercent: 60
+    scaleDownBelowPercent: 20
+    sustainedChecks: 2
+    cooldownSeconds: 45
+
+  customers-api:
+    min: 1
+    max: 2
+    scaleUpAbovePercent: 70
+    scaleDownBelowPercent: 20
+    sustainedChecks: 2
+    cooldownSeconds: 60
+
+  billing-api:
+    min: 1
+    max: 2
+    scaleUpAbovePercent: 70
+    scaleDownBelowPercent: 20
+    sustainedChecks: 2
+    cooldownSeconds: 60
+
+  documents-api:
+    min: 1
+    max: 2
+    scaleUpAbovePercent: 70
+    scaleDownBelowPercent: 20
+    sustainedChecks: 2
+    cooldownSeconds: 60
+
+  # notification-worker is deliberately NOT listed: it is a background job, one replica is enough.
+  # (Its SQL "claim" is atomic, so two replicas would still never send the same email twice. Try it: exercises.md M9.)
